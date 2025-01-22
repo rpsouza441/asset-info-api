@@ -1,36 +1,36 @@
 # Asset Information API
 
-## Overview
+## Visão Geral
 
-The **Asset Information API** is a Python-powered service designed to provide insights into stock and asset data, including market prices, asset classifications, and detailed information. Built using Flask and Flasgger, this API features interactive documentation and token-based authentication to ensure secure and accessible financial data.
+A **Asset Information API** é uma solução desenvolvida em Python que fornece dados detalhados sobre ações e ativos financeiros. Com ela, você pode consultar preços de mercado, classificar ativos e obter informações completas. Construída com Flask e Flasgger, a API conta com autenticação baseada em token e uma interface interativa via Swagger UI.
 
-## Features
+## Funcionalidades
 
-- **Retrieve Detailed Stock Information:** Access granular data like prices, volumes, and highs/lows for multiple stock tickers.
-- **Fetch Market Prices:** Quickly retrieve current market prices for a given list of tickers.
-- **Classify Assets:** Automatically categorize assets as FII, ETF, or UNIT.
-- **Detailed Asset Info:** Extended attributes, including business summaries and classifications.
-- **Secure Endpoints:** Bearer token-based authentication for restricted access.
-- **Interactive Documentation:** Swagger UI for seamless exploration and testing.
-
----
-
-## API Documentation
-
-The API documentation is hosted via Swagger UI at the `/docs` endpoint. Explore all available endpoints and test requests directly from the interface.
+- **Recuperação de Informações Detalhadas:** Dados como preços, volumes e médias móveis de múltiplos tickers.
+- **Consulta de Preços de Mercado:** Obtenha os preços mais recentes de tickers específicos.
+- **Classificação de Ativos:** Identifique se um ativo é FII, ETF ou UNIT.
+- **Detalhes de Ativos:** Acesse informações completas, incluindo resumos e tipos de cotação.
+- **Autenticação Segura:** Todos os endpoints exigem um token Bearer válido.
+- **Documentação via Swagger UI:** Interface visual e interativa para explorar os recursos da API.
 
 ---
 
-## Setup
+## Documentação da API
 
-### Prerequisites
-- Python 3.10 or higher
-- Redis for caching
-- Docker (optional)
+A documentação completa da API está disponível em `/docs`, onde você pode testar os endpoints e ver exemplos.
 
-### Installation
+---
 
-1. Clone this repository:
+## Configuração
+
+### Pré-requisitos
+- Python 3.10 ou superior
+- Redis para cache
+- Docker (opcional)
+
+### Instalação
+
+1. Clone este repositório:
    ```bash
-   git clone https://github.com/your-username/asset-info-api.git
+   git clone https://github.com/rpsouza441/asset-info-api.git
    cd asset-info-api
