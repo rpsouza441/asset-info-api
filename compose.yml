@@ -1,0 +1,29 @@
+networks:
+  app-network:
+    driver: bridge
+
+services:
+  ticker-api:
+    build: .
+    container_name: ticker-api
+    ports:
+      - "5322:80"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    volumes:
+      - .:/app  # Mapeia o diretório local para o contêiner
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    depends_on:
+      - redis
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7.0-alpine
+    container_name: ticker-api-redis
+    volumes:
+      - ./redis-data:/data
+    networks:
+      - app-network

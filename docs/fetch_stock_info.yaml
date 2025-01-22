@@ -1,0 +1,137 @@
+paths:
+  /fetch_stock_info:
+    post:
+      summary: "Fetch detailed stock information"
+      operationId: "post_fetch_stock_info"
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              tickers:
+                type: array
+                items:
+                  type: string
+                  example: "BOVA11"
+            example:
+              tickers:
+                - "BOVA11"
+                - "RBVA11"
+                - "TAEE11"
+          description: List of stock tickers to fetch detailed information for.
+        - in: header
+          name: Authorization
+          required: true
+          type: string
+          description: Bearer token for authentication (e.g., "Bearer <your_token>")
+      responses:
+        200:
+          description: Success
+          schema:
+            type: object
+            additionalProperties:
+              type: object
+              properties:
+                ask:
+                  type: number
+                  format: float
+                  example: 120.15
+                bid:
+                  type: number
+                  format: float
+                  example: 120.19
+                currentPrice:
+                  type: number
+                  format: float
+                  example: 120.15
+                longName:
+                  type: string
+                  example: "iShares Ibovespa Index Fund"
+                shortName:
+                  type: string
+                  example: "ISHARES BOVACI"
+                volume:
+                  type: integer
+                  example: 2166196
+                currency:
+                  type: string
+                  example: "BRL"
+                exchange:
+                  type: string
+                  example: "SAO"
+                dayHigh:
+                  type: number
+                  format: float
+                  example: 120.85
+                dayLow:
+                  type: number
+                  format: float
+                  example: 120.02
+          examples:
+            application/json:
+              {
+                "BOVA11.SA":
+                  {
+                    "ask": 120.15,
+                    "bid": 120.19,
+                    "currentPrice": 120.15,
+                    "longName": "iShares Ibovespa Index Fund",
+                    "shortName": "ISHARES BOVACI",
+                    "volume": 2166196,
+                    "currency": "BRL",
+                    "exchange": "SAO",
+                    "dayHigh": 120.85,
+                    "dayLow": 120.02,
+                  },
+                "RBVA11.SA":
+                  {
+                    "ask": 79.83,
+                    "bid": 79.77,
+                    "currentPrice": 79.77,
+                    "longName": "Fundo Invest Imobiliario Agencias Caixa - FII Fund",
+                    "shortName": "FII RIOB VA CI",
+                    "volume": 8973,
+                    "currency": "BRL",
+                    "exchange": "SAO",
+                    "dayHigh": 80.85,
+                    "dayLow": 79.6,
+                  },
+              }
+        400:
+          description: Invalid request
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Invalid request format"
+        401:
+          description: Unauthorized (Token is required)
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Token is required"
+        403:
+          description: Forbidden (Invalid or expired token)
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Invalid or expired token"
+        500:
+          description: Server error
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Internal server error"

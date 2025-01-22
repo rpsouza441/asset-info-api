@@ -1,0 +1,73 @@
+paths:
+  /fetch_market_price:
+    post:
+      summary: "Fetch market price for given tickers"
+      operationId: "post_fetch_market_price"
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              tickers:
+                type: array
+                items:
+                  type: string
+                  example: "BOVA11"
+            example:
+              tickers:
+                - "BOVA11"
+          description: List of stock tickers to fetch market price for.
+        - in: header
+          name: Authorization
+          required: true
+          type: string
+          description: Bearer token for authentication (e.g., "Bearer <your_token>")
+      responses:
+        200:
+          description: Success
+          schema:
+            type: array
+            items:
+              type: object
+              properties:
+                ticker:
+                  type: string
+                  description: Stock ticker symbol
+                  example: "BOVA11.SA"
+                price:
+                  type: number
+                  format: float
+                  description: Current market price of the stock
+                  example: 120.18
+          examples:
+            application/json: [{ "ticker": "BOVA11.SA", "price": 120.18 }]
+        401:
+          description: Unauthorized (Token is required)
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Token is required"
+        403:
+          description: Forbidden (Invalid or expired token)
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Invalid or expired token"
+        500:
+          description: Server error
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Internal server error"

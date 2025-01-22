@@ -1,0 +1,91 @@
+paths:
+  /fetch_asset_info:
+    post:
+      summary: "Fetch detailed information about assets"
+      operationId: "post_fetch_asset_info"
+      consumes:
+        - application/json
+      produces:
+        - application/json
+      parameters:
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            properties:
+              tickers:
+                type: array
+                items:
+                  type: string
+                  example: "BOVA11"
+            example:
+              tickers:
+                - "BOVA11"
+          description: List of stock tickers to fetch information for.
+      responses:
+        200:
+          description: Success
+          schema:
+            type: array
+            items:
+              type: object
+              properties:
+                ticker:
+                  type: string
+                  example: "BOVA11.SA"
+                longName:
+                  type: string
+                  example: "iShares Ibovespa Index Fund"
+                shortName:
+                  type: string
+                  example: "ISHARES BOVACI"
+                longBusinessSummary:
+                  type: string
+                  example: "N/A"
+                quoteType:
+                  type: string
+                  example: "EQUITY"
+          examples:
+            application/json:
+              [
+                {
+                  "ticker": "BOVA11.SA",
+                  "longName": "iShares Ibovespa Index Fund",
+                  "shortName": "ISHARES BOVACI",
+                  "longBusinessSummary": "N/A",
+                  "quoteType": "EQUITY",
+                },
+              ]
+        400:
+          description: Invalid request
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Invalid request format"
+        401:
+          description: Unauthorized (Token is required)
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Token is required"
+        403:
+          description: Forbidden (Invalid or expired token)
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Invalid or expired token"
+        500:
+          description: Server error
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Internal server error"
