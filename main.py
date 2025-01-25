@@ -5,9 +5,9 @@ from flask import Flask, request, jsonify
 from flasgger import Swagger
 from os.path import join, dirname
 
-from services import initialize_cache, authenticate, setup_logger
+from services import authenticate, setup_logger, initialize_cache, get_cached_tickers, cache_ticker_data
 
-from utils import fetch_multiple_ticker_data, normalize_text
+from utils import fetch_multiple_ticker_data, classify_asset_list
 
 
 sys.path.insert(0, dirname(abspath(__file__)))
@@ -54,7 +54,6 @@ def apply_auth():
 
 
 @app.route('/fetch_stock_info', methods=['POST'])
-@cache.cached(timeout=60, query_string=True)
 def fetch_stock_info():
     # Endpoint para buscar informações detalhadas de múltiplos tickers.
     # Recebe uma lista de tickers no corpo da requisição.
@@ -65,23 +64,37 @@ def fetch_stock_info():
     if not tickers or not isinstance(tickers, list):
         return jsonify({'error': 'Tickers must be provided as a list'}), 400
 
-    tickers_data = fetch_multiple_ticker_data(tickers)
+    cached_data, missing_tickers = get_cached_tickers(cache, tickers)
     results = {}
 
-    for ticker, stock in tickers_data.items():
-        try:
-            info = stock.info
-            results[ticker] = info
-        except Exception as e:
-            logger.error(f"Error fetching information for ticker: {ticker}. Error: {str(e)}")
-            results[ticker] = {'error': str(e)}
+    # Busca no Yahoo para os tickers ausentes
+    if missing_tickers:
+        logger.info(f"Fetching stock info for missing tickers from Yahoo: {missing_tickers}")
+        tickers_data = fetch_multiple_ticker_data(missing_tickers)
+        fetched_data = {}
+
+        for ticker, stock in tickers_data.items():
+            try:
+                info = stock.info
+                fetched_data[ticker] = info
+                results[ticker] = info
+            except Exception as e:
+                logger.error(f"Error fetching information for ticker: {ticker}. Error: {str(e)}")
+                results[ticker] = {'error': str(e)}
+
+        # Armazenar os dados no cache
+        cache_ticker_data(cache, fetched_data)
+
+    # Adicionar dados do cache aos resultados
+    for ticker, data in cached_data.items():
+        logger.info(f"Fetching stock info for ticker {ticker} from cache.")
+        results[ticker] = data
 
     return jsonify(results)
 
 
 
 @app.route('/fetch_market_price', methods=['POST'])
-@cache.cached(timeout=60)
 def fetch_market_price():
     # Endpoint para buscar o preço de mercado atual de múltiplos tickers.
     # Recebe uma lista de tickers no corpo da requisição.
@@ -92,24 +105,35 @@ def fetch_market_price():
     if not tickers or not isinstance(tickers, list):
         return jsonify({'error': 'Tickers must be provided as a list'}), 400
 
-    tickers_data = fetch_multiple_ticker_data(tickers)
+    cached_data, missing_tickers = get_cached_tickers(cache, tickers)
     results = []
 
-    for ticker, stock in tickers_data.items():
-        try:
-            info = stock.info
-            price = info.get('currentPrice', None)
-            if price is None:
-                results.append({"ticker": ticker, "error": "Price not found"})
-                continue
+    # Busca no Yahoo para os tickers ausentes
+    if missing_tickers:
+        logger.info(f"Fetching market price for missing tickers from Yahoo: {missing_tickers}")
+        tickers_data = fetch_multiple_ticker_data(missing_tickers)
+        fetched_data = {}
 
-            results.append({
-                "ticker": ticker,
-                "price": price
-            })
-        except Exception as e:
-            logger.error(f"Error fetching information for ticker: {ticker}. Error: {str(e)}")
-            results.append({"ticker": ticker, "error": str(e)})
+        for ticker, stock in tickers_data.items():
+            try:
+                info = stock.info
+                price = info.get('currentPrice', None)
+                if price is None:
+                    results.append({"ticker": ticker, "error": "Price not found"})
+                else:
+                    fetched_data[ticker] = {"price": price}
+                    results.append({"ticker": ticker, "price": price})
+            except Exception as e:
+                logger.error(f"Error fetching market price for ticker: {ticker}. Error: {str(e)}")
+                results.append({"ticker": ticker, "error": str(e)})
+
+        # Armazenar os dados no cache
+        cache_ticker_data(cache, fetched_data, timeout=60)
+
+    # Adicionar dados do cache aos resultados
+    for ticker, data in cached_data.items():
+        logger.info(f"Fetching market price for ticker {ticker} from cache.")
+        results.append({"ticker": ticker, "price": data.get("price"), "cached": True})
 
     return jsonify(results)
 
@@ -125,44 +149,19 @@ def classify_assets():
     if not tickers or not isinstance(tickers, list):
         return jsonify({'error': 'Tickers must be provided as a list'}), 400
 
-    tickers_data = fetch_multiple_ticker_data(tickers)
+    cached_data, missing_tickers = get_cached_tickers(cache, tickers)
     results = []
 
-    for ticker, stock in tickers_data.items():
-        try:
-            info = stock.info
-            # Normalizar textos
-            long_name = normalize_text(info.get("longName", "N/A"))
-            short_name = normalize_text(info.get("shortName", "N/A"))
-            long_business_summary = normalize_text(info.get("longBusinessSummary", "N/A"))
+     # Busca no Yahoo para os tickers ausentes
+    if missing_tickers:
+        logger.info(f"Classifying missing tickers from Yahoo: {missing_tickers}")
+        tickers_data = fetch_multiple_ticker_data(missing_tickers)
+        fetched_data = {}
 
-            # Listas de palavras-chave
-            fii_keywords = ["fii", "imobiliario", "imobiliario", "fundo de investimento imobiliario", "fiagro"]
-            etf_keywords = ["index", "ishare", "etf", "indice"]
-            unit_keywords = ["unt", "unit"]
-
-            # Campos a verificar
-            campos_verificar = [long_name, short_name, long_business_summary]   
-
-            # Classificação por categoria
-            category = "Unknown"
-            if any(term in campo for campo in campos_verificar for term in fii_keywords):
-                category = "FII"
-            elif any(term in campo for campo in campos_verificar for term in etf_keywords):
-                category = "ETF"
-            elif any(term in campo for campo in campos_verificar for term in unit_keywords):
-                category = "UNIT"
-
-            results.append({
-                "ticker": ticker,
-                "shortName": short_name,
-                "longName": long_name,
-                "longBusinessSummary": long_business_summary,
-                "category": category
-            })
-        except Exception as e:
-            logger.error(f"Error classifying ticker: {ticker}. Error: {str(e)}")
-            results.append({"ticker": ticker, "error": str(e)})
+        classify_asset_list(results, {ticker: stock.info for ticker, stock in tickers_data.items()}, fetched_data)
+        
+        # Armazenar os dados no cache
+        cache_ticker_data(cache, fetched_data)
 
     return jsonify(results)
 
@@ -178,9 +177,34 @@ def fetch_asset_info():
     if not tickers or not isinstance(tickers, list):
         return jsonify({'error': 'Tickers must be provided as a list'}), 400
 
-    tickers_data = fetch_multiple_ticker_data(tickers)
-    results = []
+    # Dicionário para armazenar todas as informações (cache + Yahoo)
+    all_tickers_data = {}
 
+    # Verificar o cache
+    cached_data, missing_tickers = get_cached_tickers(cache, tickers)
+    logger.info(f"Fetching asset info for cached tickers: {list(cached_data.keys())}")
+
+    # Adicionar os dados do cache ao dicionário
+    all_tickers_data.update(cached_data)
+
+    # Buscar informações dos tickers ausentes no Yahoo Finance
+    if missing_tickers:
+        logger.info(f"Fetching missing tickers from Yahoo: {missing_tickers}")
+        tickers_data = fetch_multiple_ticker_data(missing_tickers)
+
+        for ticker, stock in tickers_data.items():
+            try:
+                info = stock.info
+                all_tickers_data[ticker] = info
+            except Exception as e:
+                logger.error(f"Error fetching asset info for ticker: {ticker}. Error: {str(e)}")
+                all_tickers_data[ticker] = {"error": str(e)}
+
+        # Armazenar os dados buscados no cache
+        cache_ticker_data(cache, {ticker: data for ticker, data in all_tickers_data.items() if ticker in missing_tickers})
+
+    # Construir a lista de resultados
+    results = []
     for ticker, stock in tickers_data.items():
         try:
             info = stock.info

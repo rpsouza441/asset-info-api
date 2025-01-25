@@ -25,3 +25,43 @@ def normalize_text(text):
         c for c in unicodedata.normalize('NFKD', text)
         if not unicodedata.combining(c)
     ).lower()
+
+def classify_asset_list(results, tickers_data, fetched_data=None):
+    fetched_data = fetched_data or {}
+
+
+    for ticker, info in tickers_data.items():
+        try:
+                # Normalizar textos
+            long_name = normalize_text(info.get("longName", "N/A"))
+            short_name = normalize_text(info.get("shortName", "N/A"))
+            long_business_summary = normalize_text(info.get("longBusinessSummary", "N/A"))
+
+                # Listas de palavras-chave
+            fii_keywords = ["fii", "imobiliario", "imobiliario", "fundo de investimento imobiliario", "fiagro"]
+            etf_keywords = ["index", "ishare", "etf", "indice"]
+            unit_keywords = ["unt", "unit"]
+
+                # Campos a verificar
+            campos_verificar = [long_name, short_name, long_business_summary]   
+
+                # Classificação por categoria
+            category = "Unknown"
+            if any(term in campo for campo in campos_verificar for term in fii_keywords):
+                category = "FII"
+            elif any(term in campo for campo in campos_verificar for term in etf_keywords):
+                category = "ETF"
+            elif any(term in campo for campo in campos_verificar for term in unit_keywords):
+                category = "UNIT"
+
+            fetched_data[ticker] = info
+            results.append({
+                    "ticker": ticker,
+                    "shortName": short_name,
+                    "longName": long_name,
+                    "longBusinessSummary": long_business_summary,
+                    "category": category
+                })
+        except Exception as e:
+            logger.error(f"Error classifying ticker: {ticker}. Error: {str(e)}")
+            results.append({"ticker": ticker, "error": str(e)})

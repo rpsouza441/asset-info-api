@@ -1,4 +1,5 @@
 from flask_caching import Cache
+from utils import ensure_sa_suffix
 
 def create_cache(app):
     """
@@ -32,3 +33,30 @@ def set_to_cache(cache, key, value, timeout=300):
     Stores a value in the cache.
     """
     cache.set(key, value, timeout=timeout)
+
+def get_cached_tickers(cache, tickers):
+    """
+    Retrieve cached data for a list of tickers.
+    Returns a tuple with two lists: cached_data and missing_tickers.
+    """
+    cached_data = {}
+    missing_tickers = []
+
+    # Normalizar tickers para incluir o sufixo .SA
+    normalized_tickers = ensure_sa_suffix(tickers)
+
+    for ticker in normalized_tickers:
+        data = cache.get(ticker)
+        if data:
+            cached_data[ticker] = data
+        else:
+            missing_tickers.append(ticker)
+    
+    return cached_data, missing_tickers
+
+def cache_ticker_data(cache, ticker_data, timeout=300):
+    """
+    Caches data for multiple tickers.
+    """
+    for ticker, data in ticker_data.items():
+        cache.set(ticker, data, timeout=timeout)
