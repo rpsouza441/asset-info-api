@@ -46,7 +46,7 @@ def set_to_cache(cache, key, value, timeout=300):
 
 def get_cached_tickers(cache, tickers):
     """
-    Retrieve cached data for a list of tickers.
+    Retrieve cached stock objects for a list of tickers.
     Returns a tuple with two lists: cached_data and missing_tickers.
 
     Args:
@@ -62,13 +62,17 @@ def get_cached_tickers(cache, tickers):
 
 
     for ticker in tickers:
-        data = cache.get(ticker)
-        if data:
-            cached_data[ticker] = data
-            logger.info(f"Cache hit for ticker: {ticker}")
-        else:
+        try:
+            data = cache.get(ticker)
+            if data:
+                cached_data[ticker] = data
+                logger.info(f"Cache hit for ticker: {ticker}")
+            else:
+                missing_tickers.append(ticker)
+                logger.info(f"Cache miss for ticker: {ticker}")
+        except Exception as e:
+            logger.error(f"Error retrieving ticker {ticker} from cache: {str(e)}")
             missing_tickers.append(ticker)
-            logger.info(f"Cache miss for ticker: {ticker}")
 
     logger.info(f"Total tickers found in cache: {len(cached_data)}")
     logger.info(f"Total missing tickers: {len(missing_tickers)}")   
@@ -77,19 +81,15 @@ def get_cached_tickers(cache, tickers):
 
 def cache_ticker_data(cache, ticker_data, timeout=300):
     """
-    Caches data for multiple tickers.
+    Salva dados serializáveis dos tickers no cache.
 
     Args:
         cache (Cache): Instância do cache.
-        ticker_data (dict): Dados dos tickers no formato {ticker: info}.
+        ticker_data (dict): Dados dos tickers no formato {ticker: serializable_data}.
         timeout (int): Tempo de expiração do cache em segundos (default: 300).
     """
     if not isinstance(ticker_data, dict):
         logger.error("Invalid ticker_data format. Expected a dictionary.")
-        return
-
-    if not ticker_data:
-        logger.info("No ticker data provided for caching.")
         return
 
     for ticker, data in ticker_data.items():
@@ -98,3 +98,4 @@ def cache_ticker_data(cache, ticker_data, timeout=300):
             logger.info(f"Cached data for ticker: {ticker}")
         else:
             logger.warning(f"Skipping caching for ticker {ticker} due to missing data.")
+

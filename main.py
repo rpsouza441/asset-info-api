@@ -4,7 +4,7 @@ from os.path import dirname, abspath
 from flask import Flask, request, jsonify
 from flasgger import Swagger
 from os.path import join, dirname
-
+import pandas as pd
 from services import authenticate, setup_logger, initialize_cache, fetch_multiple_ticker_data, classify_asset_list
 
 
@@ -71,27 +71,26 @@ def fetch_stock_info():
         logger.info("Fetching data using fetch_multiple_ticker_data.")
         tickers_data = fetch_multiple_ticker_data(tickers, cache)
 
-        # Construir a resposta com os dados obtidos
+          # Construir a resposta com os dados `info`
         results = []
-        for ticker, info in tickers_data.items():
-            if info and isinstance(info, dict):
-                logger.info(f"Data retrieved successfully for ticker: {ticker}")
-                results.append({
-                    "ticker": ticker,
-                    "longName": info.get("longName", "N/A"),
-                    "shortName": info.get("shortName", "N/A"),
-                    "sector": info.get("sector", "N/A"),
-                    "industry": info.get("industry", "N/A"),
-                    "quoteType": info.get("quoteType", "N/A"),
-                })
-            else:
-                logger.warning(f"No valid data found for ticker: {ticker}")
-                results.append({"ticker": ticker, "error": "No valid data found"})
+        for ticker, data in tickers_data.items():
+            try:
+                if data and "info" in data:
+                    # Adicionar apenas o campo `info` ao resultado
+                    results.append(data["info"])
+                    logger.info(f"Info retrieved for ticker {ticker}.")
+                else:
+                    logger.warning(f"No valid data found for ticker: {ticker}")
+                    results.append({"ticker": ticker, "error": "No valid data found"})
+            except Exception as e:
+                logger.error(f"Error processing data for ticker {ticker}: {str(e)}")
+                results.append({"ticker": ticker, "error": "Processing error", "exception": str(e)})
 
         logger.info(f"Successfully processed stock info for tickers: {tickers}")
-        return jsonify(results)
+        return jsonify(results), 200
+
     except Exception as e:
-        logger.error(f"Error in fetch_stock_info: {str(e)}")
+        logger.error(f"Error in fetch_stock_info: {str(e)}", exc_info=True)
         return jsonify({'error': f"Failed to fetch stock info: {str(e)}"}), 500
 
 
@@ -117,21 +116,28 @@ def fetch_market_price():
 
         # Construir os resultados com os preços
         results = []
-        for ticker, info in tickers_data.items():
-            if info and isinstance(info, dict):
-                price = info.get('currentPrice', None)
-                if price is not None:
-                    logger.info(f"Price retrieved for ticker {ticker}: {price}")
-                    results.append({"ticker": ticker, "price": price})
+        for ticker, data in tickers_data.items():
+            try:
+                if data:
+                    # Acessar diretamente os dados serializáveis
+                    info = data.get("info", {})
+                    price = info.get("currentPrice", None)
+
+                    if price is not None:
+                        logger.info(f"Price retrieved for ticker {ticker}: {price}")
+                        results.append({"ticker": ticker, "price": price})
+                    else:
+                        logger.warning(f"Price not found for ticker: {ticker}")
+                        results.append({"ticker": ticker, "error": "Price not found"})
                 else:
-                    logger.warning(f"Price not found for ticker: {ticker}")
-                    results.append({"ticker": ticker, "error": "Price not found"})
-            else:
-                logger.warning(f"No valid data found for ticker: {ticker}")
-                results.append({"ticker": ticker, "error": "No valid data found"})
+                    logger.warning(f"No valid data found for ticker: {ticker}")
+                    results.append({"ticker": ticker, "error": "No valid data found"})
+            except Exception as e:
+                logger.error(f"Error processing data for ticker {ticker}: {str(e)}")
+                results.append({"ticker": ticker, "error": "Processing error", "exception": str(e)})
 
         logger.info("Market price fetch completed successfully.")
-        return jsonify(results)
+        return jsonify(results), 200
     except Exception as e:
         logger.error(f"Error in fetch_market_price: {str(e)}", exc_info=True)
         return jsonify({'error': f"Failed to fetch market prices: {str(e)}"}), 500
@@ -195,25 +201,87 @@ def fetch_asset_info():
 
         # Construir os resultados com as informações detalhadas
         results = []
-        for ticker, info in tickers_data.items():
-            if info and isinstance(info, dict):
-                results.append({
-                    "ticker": ticker,
-                    "longName": info.get("longName", "N/A"),
-                    "shortName": info.get("shortName", "N/A"),
-                    "longBusinessSummary": info.get("longBusinessSummary", "N/A"),
-                    "quoteType": info.get("quoteType", "N/A"),
-                })
-                logger.info(f"Information retrieved for ticker {ticker}.")
-            else:
-                results.append({"ticker": ticker, "error": "No valid data found"})
-                logger.warning(f"No valid data found for ticker {ticker}.")
+        for ticker, data in tickers_data.items():
+            try:
+                if data:
+                    # Acessar diretamente o dicionário serializável
+                    info = data.get("info", {})
+                    results.append({
+                        "ticker": ticker,
+                        "longName": info.get("longName", "N/A"),
+                        "shortName": info.get("shortName", "N/A"),
+                        "longBusinessSummary": info.get("longBusinessSummary", "N/A"),
+                        "quoteType": info.get("quoteType", "N/A"),
+                    })
+                    logger.info(f"Information retrieved for ticker {ticker}.")
+                else:
+                    results.append({"ticker": ticker, "error": "No valid data found"})
+                    logger.warning(f"No valid data found for ticker {ticker}.")
+            except Exception as e:
+                logger.error(f"Error processing data for ticker {ticker}: {str(e)}")
+                results.append({"ticker": ticker, "error": "Processing error", "exception": str(e)})
 
         logger.info("Asset information fetch completed successfully.")
-        return jsonify(results)
+        return jsonify(results), 200
+
     except Exception as e:
         logger.error(f"Error in fetch_asset_info: {str(e)}", exc_info=True)
         return jsonify({'error': f"Failed to fetch asset information: {str(e)}"}), 500
+    
+
+@app.route('/fetch_recommendations', methods=['POST'])
+def fetch_recommendations():
+    # Endpoint para buscar informações detalhadas de recomendações de múltiplos tickers.
+    # Recebe uma lista de tickers no corpo da requisição.
+    # Retorna recomendações completas de cada ticker.
+    data = request.get_json()
+    tickers = data.get('tickers')
+
+    if not tickers or not isinstance(tickers, list):
+        logger.warning("Invalid request: 'tickers' is either missing or not a list.")
+        return jsonify({'error': 'Tickers must be provided as a list'}), 400
+
+    logger.info(f"Received request to fetch recommendations for tickers: {tickers}")
+
+    try:
+        # Busca os dados do cache e do Yahoo Finance
+        logger.info("Fetching data using fetch_multiple_ticker_data.")
+        tickers_data = fetch_multiple_ticker_data(tickers, cache)
+
+        # Construir a resposta com os dados obtidos
+        results = []
+        for ticker, data in tickers_data.items():
+            try:
+                if data:
+                    recommendations = data.get("recommendations", [])
+                    price_targets = data.get("price_targets", {})
+                    growth_estimates = data.get("growth_estimates", {})
+
+                    # Verifica e converte DataFrames para listas de dicionários
+                    if isinstance(recommendations, pd.DataFrame):
+                        recommendations = recommendations.to_dict(orient="records")
+                    if isinstance(growth_estimates, pd.DataFrame):
+                        growth_estimates = growth_estimates.to_dict(orient="records")
+
+                    results.append({
+                        "ticker": ticker,
+                        "recommendations": recommendations,
+                        "price_targets": price_targets,
+                        "growth_estimates": growth_estimates
+                    })
+                else:
+                    logger.warning(f"No valid data found for ticker: {ticker}")
+                    results.append({"ticker": ticker, "error": "No valid data found"})
+            except Exception as e:
+                logger.error(f"Error processing data for ticker {ticker}: {str(e)}")
+                results.append({"ticker": ticker, "error": "Processing error", "exception": str(e)})
+
+        logger.info(f"Successfully processed recommendations for tickers: {tickers}")
+        return jsonify(results), 200
+
+    except Exception as e:
+        logger.error(f"Error in fetch_recommendations: {str(e)}", exc_info=True)
+        return jsonify({'error': f"Failed to fetch recommendations: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=80, debug=True)

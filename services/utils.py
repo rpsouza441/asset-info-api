@@ -22,7 +22,7 @@ def fetch_multiple_ticker_data(tickers, cache, timeout=300):
         timeout (int): Tempo para expiração do cache em segundos (default: 300).
 
     Returns:
-        dict: Um dicionário com os dados dos tickers.
+        dict: Um dicionário com os dados serializáveis dos tickers.
     """
 
     logger.info("Fetching data for multiple tickers.")
@@ -45,7 +45,7 @@ def fetch_multiple_ticker_data(tickers, cache, timeout=300):
     for ticker, stock in yf_tickers.tickers.items():
         try:
             stock.history(period="1d")  # Verifica se o ticker é válido
-            fetched_data[ticker] = stock.info
+            fetched_data[ticker] = serialize_stock_data(stock)
         except Exception as e:
             logger.error(f"Error fetching data for ticker {ticker}: {str(e)}")
 
@@ -68,24 +68,25 @@ def classify_asset_list(results, tickers_data, fetched_data=None):
     """
     Classifica os ativos em categorias como FII, ETF ou UNIT e atualiza os resultados.
     """
-
     fetched_data = fetched_data or {}
-
-
-    for ticker, info in tickers_data.items():
+    
+    for ticker, data in tickers_data.items():
         try:
+            # Acessar o campo `info` dos dados serializáveis
+            info = data.get("info", {})
+
             # Normalizar textos
             long_name = normalize_text(info.get("longName", "N/A"))
             short_name = normalize_text(info.get("shortName", "N/A"))
             long_business_summary = normalize_text(info.get("longBusinessSummary", "N/A"))
 
             # Listas de palavras-chave
-            fii_keywords = ["fii", "imobiliario", "imobiliario", "fundo de investimento imobiliario", "fiagro"]
+            fii_keywords = ["fii", "imobiliario", "fundo de investimento imobiliario", "fiagro"]
             etf_keywords = ["index", "ishare", "etf", "indice"]
             unit_keywords = ["unt", "unit"]
 
             # Campos a verificar
-            campos_verificar = [long_name, short_name, long_business_summary]   
+            campos_verificar = [long_name, short_name]
 
             # Classificação por categoria
             category = "Unknown"
@@ -97,14 +98,36 @@ def classify_asset_list(results, tickers_data, fetched_data=None):
                 category = "UNIT"
 
             # Armazenar o resultado processado
-            fetched_data[ticker] = info # Atualiza os dados no cache
+            fetched_data[ticker] = data  # Atualiza os dados no cache (se necessário)
             results.append({
-                    "ticker": ticker,
-                    "shortName": short_name,
-                    "longName": long_name,
-                    "longBusinessSummary": long_business_summary,
-                    "category": category
-                })
+                "ticker": ticker,
+                "shortName": short_name,
+                "longName": long_name,
+                "longBusinessSummary": long_business_summary,
+                "category": category
+            })
         except Exception as e:
             logger.error(f"Error classifying ticker: {ticker}. Error: {str(e)}")
-            results.append({"ticker": ticker, "error": str(e)})
+            results.append({"ticker": ticker, "error": "Processing error", "exception": str(e)})
+
+
+def serialize_stock_data(stock):
+    """
+    Serializa os dados de um objeto `yfinance.Ticker` para um formato armazenável e reutilizável.
+
+    Args:
+        stock (yfinance.Ticker): Objeto Ticker retornado pelo yfinance.
+
+    Returns:
+        dict: Dados serializáveis do ticker.
+    """
+    try:
+        return {
+            "info": stock.info,
+            "recommendations": stock.recommendations.to_dict() if hasattr(stock, "recommendations") else [],
+            "price_targets": stock.analyst_price_targets if hasattr(stock, "analyst_price_targets") else {},
+            "growth_estimates": stock.growth_estimates if hasattr(stock, "growth_estimates") else {}
+        }
+    except Exception as e:
+        logger.error(f"Error serializing stock data: {str(e)}")
+        return {}
