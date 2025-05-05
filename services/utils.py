@@ -11,23 +11,22 @@ def ensure_sa_suffix(tickers):
     """
     return [ticker.strip().upper() + ".SA" if not ticker.strip().upper().endswith(".SA") else ticker.strip().upper() for ticker in tickers]
 
-def fetch_multiple_ticker_data(tickers, cache, timeout=300):
+def fetch_multiple_ticker_data(tickers, cache):
     """
-    Busca os dados de múltiplos tickers. Primeiro verifica o cache,
-    e para os tickers ausentes, busca no Yahoo Finance e salva no cache.
+    Busca dados de múltiplos tickers em lote usando yf.download.
+    Primeiro verifica o cache, faz download dos faltantes em batch,
+    serializa, armazena no cache e retorna o conjunto completo.
 
     Args:
-        tickers (list): Lista de tickers a serem buscados.
-        cache (Cache): Instância do cache.
-        timeout (int): Tempo para expiração do cache em segundos (default: 300).
+        tickers (list): lista de códigos (ex: ['PETR4', 'VALE3']).
+        cache: instância de cache com métodos get_cached_tickers e cache_ticker_data.
 
     Returns:
-        dict: Um dicionário com os dados serializáveis dos tickers.
+        dict: dados serializáveis por ticker.
     """
 
     logger.info("Fetching data for multiple tickers.")
     normalized_tickers = ensure_sa_suffix(tickers)
-
     cached_data, missing_tickers = get_cached_tickers(cache, normalized_tickers)
     
     # Se todos os tickers já estiverem no cache, retorna diretamente
@@ -35,26 +34,44 @@ def fetch_multiple_ticker_data(tickers, cache, timeout=300):
         logger.info("All tickers found in cache.")
         return cached_data
     
-    # Busca os tickers faltantes no Yahoo Finance
-    logger.info(f"Fetching data for missing tickers from Yahoo: {missing_tickers}")
+    # Batch-download do Yahoo Finance
+    logger.info(f"Batch downloading {len(missing)} tickers: {missing}")
     tickers_with_sa = ensure_sa_suffix(tickers)
-    yf_tickers = yf.Tickers(" ".join(tickers_with_sa))
-    
-    # Processa os resultados do Yahoo Finance
-    fetched_data = {}
-    for ticker, stock in yf_tickers.tickers.items():
-        try:
-            stock.history(period="1d")  # Verifica se o ticker é válido
-            fetched_data[ticker] = serialize_stock_data(stock)
-        except Exception as e:
-            logger.error(f"Error fetching data for ticker {ticker}: {str(e)}")
+    try:
+      # Histórico de fechamento apenas para validar tickers e obter última cotação
+        df = yf.download(
+            missing_tickers,
+            period="1d",
+            group_by="ticker",
+            threads=True,
+            progress=False
+        )
+        fetched = {}
+        for norm in missing_tickers:
+            # verifica se retornou colunas para esse ticker
+            cols = getattr(df.columns, "levels", None)
+            if not cols or norm not in cols[0]:
+                logger.error(f"Ticker {norm} não retornou dados em yf.download.")
+                continue
 
-    # Salva os dados buscados no cache
-    cache_ticker_data(cache, fetched_data, timeout=timeout)
+            # instancia Ticker para serializar demais campos
+            tk = yf.Ticker(norm)
+            try:
+                fetched[norm] = serialize_stock_data(tk)
+            except Exception as e:
+                logger.error(f"Error serializing {norm}: {e}")
 
-    # Combina os dados do cache com os dados recém-buscados
-    combined_data = {**cached_data, **fetched_data}
-    return combined_data
+
+        # Salva os dados buscados no cache
+        cache_ticker_data(cache, fetched_data)
+
+        # Combina os dados do cache com os dados recém-buscados
+        combined_data = {**cached_data, **fetched_data}
+        return combined_data
+    except (Exception, SystemExit) as e:
+        logger.error(f"Erro ao buscar dados do Yahoo Finance: {str(e)}")
+        # Em caso de erro, retorna os dados em cache (se existirem) ou um dicionário vazio
+        return cached_data if cached_data else {}
 
 
 def normalize_text(text):
